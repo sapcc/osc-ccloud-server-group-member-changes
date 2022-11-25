@@ -13,7 +13,6 @@
 # under the License.
 
 from novaclient.v2.server_groups import ServerGroup
-from openstackclient.compute.v2.server_group import _formatters, _get_columns
 from osc_lib.command import command
 from osc_lib import utils
 
@@ -80,10 +79,23 @@ class BaseMemberCommand(command.ShowOne):
             raise Exception("Error: API returned {} - {}"
                             .format(resp.status_code, resp.text))
 
-        # NOTE This is the same code as openstackclient uses to format a
-        # server-group.
         content = body['server_group']
         group = ServerGroup(self, content, loaded=True, resp=resp)
+
+        try:
+            from openstackclient.compute.v2.server_group import _get_server_group_columns  # noqa:F401
+
+            return self._format_server_group(group, client_manager.compute.client)
+        except ImportError:
+            return self._format_server_group_legacy(group)
+
+    def _format_server_group_legacy(self, group):
+        """Format the server-group like openstackclient
+
+        Compatible with openstackclient < 6.0.0
+        """
+        from openstackclient.compute.v2.server_group import _formatters, _get_columns
+
         info = {}
         info.update(group._info)
 
@@ -91,6 +103,25 @@ class BaseMemberCommand(command.ShowOne):
         data = utils.get_dict_properties(
             info, columns, formatters=_formatters)
         return columns, data
+
+    def _format_server_group(self, group, compute_client):
+        """Format the server-group like openstackclient
+
+        Compatible with openstackclient >= 6.0.0
+        """
+        from openstackclient.compute.v2.server_group import _formatters, _get_server_group_columns
+
+        info = {}
+        info.update(group._info)
+
+        display_columns, columns = _get_server_group_columns(
+            info,
+            compute_client,
+        )
+        data = utils.get_item_properties(
+            group, columns, formatters=_formatters
+        )
+        return display_columns, data
 
 
 class AddMembers(BaseMemberCommand):
